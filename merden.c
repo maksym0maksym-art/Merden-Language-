@@ -32,11 +32,6 @@ static void mrd_strcpy_bounded(char *dst, const char *src, int max_len)
     }
     dst[i] = '\0';
 }
-
-/* ------------------------------------------------------------------ */
-/* Tokens                                                              */
-/* ------------------------------------------------------------------ */
-
 typedef enum {
     TK_EOF, TK_NEWLINE, TK_IDENT, TK_NUMBER, TK_STRING,
 
@@ -51,19 +46,13 @@ typedef enum {
 
 typedef struct {
     MTokenKind kind;
-    int  number;                 /* for TK_NUMBER                    */
-    char text[MRD_MAX_STR];      /* for TK_IDENT / TK_STRING         */
+    int  number;                 
+    char text[MRD_MAX_STR];
     int  line;
 } MToken;
 
 static MToken mrd_tokens[MRD_MAX_TOKENS];
 static int    mrd_token_count = 0;
-
-/* ------------------------------------------------------------------ */
-/* Error state — instead of exceptions/longjmp, every executor        */
-/* function checks mrd_had_error at its start and bails out           */
-/* immediately if it is already set ("poison" propagation).           */
-/* ------------------------------------------------------------------ */
 
 static int  mrd_had_error = 0;
 static char mrd_error_msg[64];
@@ -72,7 +61,7 @@ static int  mrd_error_line = 0;
 static void mrd_error(const char *msg, int line)
 {
     if (mrd_had_error)
-        return; /* keep the first error */
+        return;
     mrd_had_error = 1;
     mrd_error_line = line;
     mrd_strcpy_bounded(mrd_error_msg, msg, sizeof(mrd_error_msg));
@@ -86,11 +75,6 @@ static void mrd_print_error(void)
     shell_print_int(mrd_error_line);
     shell_print(")\n");
 }
-
-/* ------------------------------------------------------------------ */
-/* Lexer                                                               */
-/* ------------------------------------------------------------------ */
-
 static void mrd_push_token(MTokenKind kind, int number, const char *text, int line)
 {
     if (mrd_token_count >= MRD_MAX_TOKENS)
@@ -157,7 +141,7 @@ static void mrd_tokenize(const char *src)
             int start_line = line;
             char buf[MRD_MAX_STR];
             int len = 0;
-            i++; /* opening quote */
+            i++;
 
             while (src[i] != '\0' && src[i] != '"')
             {
@@ -200,7 +184,7 @@ static void mrd_tokenize(const char *src)
                 return;
             }
             buf[len] = '\0';
-            i++; /* closing quote */
+            i++;
 
             mrd_push_token(TK_STRING, 0, buf, start_line);
             continue;
@@ -271,17 +255,12 @@ static void mrd_tokenize(const char *src)
     mrd_push_token(TK_EOF, 0, 0, line);
 }
 
-/* ------------------------------------------------------------------ */
-/* Variables — flat table with a scope-depth stack (push/pop marks    */
-/* instead of nested hash maps).                                      */
-/* ------------------------------------------------------------------ */
-
 typedef enum { MVAL_NUMBER, MVAL_STRING, MVAL_BOOL } MValueType;
 
 typedef struct {
     MValueType type;
-    int  number;              /* NUMBER / BOOL (0 or 1)              */
-    char text[MRD_MAX_STR];   /* STRING                              */
+    int  number;
+    char text[MRD_MAX_STR]; 
 } MValue;
 
 typedef struct {
@@ -312,8 +291,6 @@ static void mrd_scope_leave(void)
     mrd_var_count = mrd_scope_marks[--mrd_scope_depth];
 }
 
-/* Look up a variable starting from the innermost (most recent) entry
- * so shadowing in nested blocks behaves as expected. */
 static MVar *mrd_find_var(const char *name)
 {
     for (int i = mrd_var_count - 1; i >= 0; i--)
@@ -324,8 +301,6 @@ static MVar *mrd_find_var(const char *name)
     return 0;
 }
 
-/* Declares a new variable in the CURRENT scope. Returns 0 if a
- * variable with that name already exists in this scope. */
 static MVar *mrd_declare_var(const char *name, int line)
 {
     int scope_start = (mrd_scope_depth > 0) ? mrd_scope_marks[mrd_scope_depth - 1] : 0;
@@ -349,10 +324,6 @@ static MVar *mrd_declare_var(const char *name, int line)
     mrd_strcpy_bounded(v->name, name, MRD_MAX_STR);
     return v;
 }
-
-/* ------------------------------------------------------------------ */
-/* Parser / evaluator state                                            */
-/* ------------------------------------------------------------------ */
 
 static int mrd_pos = 0;
 
@@ -402,7 +373,6 @@ static void mrd_consume_statement_end(void)
     mrd_error("Each command must end with a new line", mrd_peek()->line);
 }
 
-/* Forward declarations */
 static MValue mrd_expression(void);
 static void   mrd_statement(void);
 
@@ -416,8 +386,6 @@ static MValue mrd_string(const char *s)
     mrd_strcpy_bounded(v.text, s, MRD_MAX_STR);
     return v;
 }
-
-/* -------------------------- expressions --------------------------- */
 
 static MValue mrd_primary(void)
 {
@@ -580,9 +548,6 @@ static MValue mrd_expression(void)
     if (mrd_had_error) return mrd_number(0);
     return mrd_equality();
 }
-
-/* --------------------------- statements ---------------------------- */
-
 static void mrd_print_value(MValue v)
 {
     if (v.type == MVAL_NUMBER)
@@ -593,7 +558,6 @@ static void mrd_print_value(MValue v)
         shell_print(v.number ? "true" : "false");
 }
 
-/* Prints a string literal, expanding {identifier} interpolations. */
 static void mrd_say_string(const char *s, int line)
 {
     int i = 0;
@@ -610,7 +574,7 @@ static void mrd_say_string(const char *s, int line)
 
             if (s[j] != '}')
             {
-                shell_print("{"); /* not a real interpolation, print literally */
+                shell_print("{");
                 i++;
                 continue;
             }
@@ -631,10 +595,6 @@ static void mrd_say_string(const char *s, int line)
         i++;
     }
 }
-
-/* Skips one {...} block starting at the current token (which must be
- * TK_LBRACE) without executing it. Leaves mrd_pos right after the
- * matching TK_RBRACE. */
 static void mrd_skip_block(void)
 {
     mrd_consume(TK_LBRACE, "A block in curly braces is expected");
@@ -651,8 +611,6 @@ static void mrd_skip_block(void)
     mrd_consume(TK_RBRACE, "Code block is not closed with '}'");
 }
 
-/* Executes the statements inside a {...} block starting at the
- * current token. Leaves mrd_pos right after the matching '}'. */
 static void mrd_exec_block(void)
 {
     mrd_consume(TK_LBRACE, "A block in curly braces is expected");
@@ -697,8 +655,6 @@ static void mrd_statement(void)
     {
         int line = mrd_previous()->line;
 
-        /* String literal with possible {var} interpolation gets special
-         * handling; anything else is evaluated and printed as-is. */
         if (mrd_check(TK_STRING))
         {
             MToken *tok = mrd_advance();
@@ -740,7 +696,7 @@ static void mrd_statement(void)
         }
         else
         {
-            mrd_pos = checkpoint; /* no otherwise: newlines belong to statement end */
+            mrd_pos = checkpoint;
         }
         (void)then_start;
         return;
